@@ -1,7 +1,19 @@
 import comfy.model_management
 import comfy.memory_management
-import comfy_aimdo.host_buffer
-import comfy_aimdo.torch
+import logging
+import torch
+
+try:
+    import comfy_aimdo.host_buffer as aimdo_host_buffer
+except Exception:
+    aimdo_host_buffer = None
+
+try:
+    import comfy_aimdo.torch as aimdo_torch
+except Exception:
+    aimdo_torch = None
+
+_WARNED_FALLBACK = False
 
 from comfy.cli_args import args
 
@@ -9,6 +21,7 @@ def get_pin(module):
     return getattr(module, "_pin", None)
 
 def pin_memory(module):
+    global _WARNED_FALLBACK
     if module.pin_failed or args.disable_pinned_memory or get_pin(module) is not None:
         return
     #FIXME: This is a RAM cache trigger event
@@ -19,13 +32,20 @@ def pin_memory(module):
         return False
 
     try:
-        hostbuf = comfy_aimdo.host_buffer.HostBuffer(size)
+        if aimdo_host_buffer is not None and aimdo_torch is not None and hasattr(aimdo_torch, "hostbuf_to_tensor"):
+            hostbuf = aimdo_host_buffer.HostBuffer(size)
+            module._pin = aimdo_torch.hostbuf_to_tensor(hostbuf)
+            module._pin_hostbuf = hostbuf
+        else:
+            if not _WARNED_FALLBACK:
+                logging.warning("comfy_aimdo.host_buffer unavailable; using torch pinned-memory fallback.")
+                _WARNED_FALLBACK = True
+            module._pin = torch.empty(size, dtype=torch.uint8, pin_memory=True)
+            module._pin_hostbuf = None
     except RuntimeError:
         module.pin_failed = True
         return False
 
-    module._pin = comfy_aimdo.torch.hostbuf_to_tensor(hostbuf)
-    module._pin_hostbuf = hostbuf
     comfy.model_management.TOTAL_PINNED_MEMORY += size
     return True
 
@@ -39,5 +59,6 @@ def unpin_memory(module):
         comfy.model_management.TOTAL_PINNED_MEMORY = 0
 
     del module._pin
-    del module._pin_hostbuf
+    if hasattr(module, "_pin_hostbuf"):
+        del module._pin_hostbuf
     return size
