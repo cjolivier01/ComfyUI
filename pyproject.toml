@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "ComfyUI"
 version = "0.19.5"
@@ -9,6 +13,34 @@ requires-python = ">=3.10"
 homepage = "https://www.comfy.org/"
 repository = "https://github.com/comfyanonymous/ComfyUI"
 documentation = "https://docs.comfy.org/"
+
+[tool.setuptools]
+include-package-data = true
+py-modules = [
+  "comfyui_version",
+  "cuda_malloc",
+  "execution",
+  "folder_paths",
+  "hook_breaker_ac10a0",
+  "latent_preview",
+  "main",
+  "new_updater",
+  "node_helpers",
+  "nodes",
+  "protocol",
+  "server",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+  "api_server*",
+  "app*",
+  "comfy*",
+  "middleware*",
+  "utils*",
+]
+namespaces = true
 
 [tool.ruff]
 lint.select = [
